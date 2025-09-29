@@ -1,8 +1,10 @@
 #pragma once
 #include "geometry.hpp"
 #include <algorithm>
+#include <expected>
 #include <format>
-#include <set>
+#include <initializer_list>
+#include <map>
 #include <vector>
 
 namespace geometry::triangulation {
@@ -15,7 +17,7 @@ struct DelaunayTriangle {
     bool ContainsPoint(const Point2D &p) const {
         Point2D center = Circumcenter();
         double radius = Circumradius();
-        return center.DistanceTo(p) <= radius + 1e-10;
+        return center.DistanceTo(p) < radius + 1e-10;
     }
 
     Point2D Circumcenter() const {
@@ -58,6 +60,8 @@ struct DelaunayTriangle {
     }
 
     std::vector<Point2D> vertices() const { return {a, b, c}; }
+
+    bool operator==(const DelaunayTriangle &other) const { return a == other.a && b == other.b && c == other.c; }
 };
 
 struct Edge {
@@ -85,59 +89,76 @@ struct Edge {
     }
 };
 
-inline GeometryResult<std::vector<DelaunayTriangle>> DelaunayTriangulation(std::span<const Point2D> points) {
+inline GeometryResult<std::vector<DelaunayTriangle>> DelaunayTriangulation(const std::span<Point2D> points) {
 
-    /*
-    Триангуляция Делоне алгоритмом Боуэра-Ватсона
+    if (points.size() < 3) {
+        return std::unexpected(GeometryError::InvalidInput);
+    }
 
-    - wiki с описанием триангуляции Делоне    - https://en.wikipedia.org/wiki/Delaunay_triangulation
-    - wiki с описанием алгоритма и псевдокода - https://en.wikipedia.org/wiki/Bowyer%E2%80%93Watson_algorithm
-    */
+    geometry::Polygon poly{std::vector<Point2D>(points.begin(), points.end())};
+    auto bb = poly.BoundBox();
 
-    // Создаём список для хранения текущей триангуляции и добавляем в него "Супер-треугольник",
-    // содержащий внутри себя все точки
-
-    Point2D super1;
-    Point2D super2;
-    Point2D super3;
+    double padding = std::max(bb.max_x - bb.min_x, bb.max_y - bb.min_y) * 1.0;
+    Point2D super1{bb.min_x - padding, bb.min_y - padding};
+    Point2D super2{bb.max_x + padding * 2, bb.min_y - padding};
+    Point2D super3{bb.min_x + padding, bb.max_y + padding * 2};
     std::vector<DelaunayTriangle> triangulation;
+    triangulation.emplace_back(super1, super2, super3);
 
-    /*
-    Далее
+    auto watson_bowyer_algo = [&triangulation](const Point2D &point) {
+        std::vector<DelaunayTriangle> bad_tr = triangulation |
+                                               std::ranges::views::filter([&point](const DelaunayTriangle &tr) -> bool {
+                                                   return tr.ContainsPoint(point);
+                                               }) |
+                                               std::ranges::to<std::vector>();
+        if (bad_tr.empty())
+            return;
 
-    Цикл по всем точкам
+        std::vector<Edge> all_edges;
+        std::ranges::for_each(bad_tr, [&all_edges](const auto &triangle) {
+            auto vertices = triangle.vertices();
+            all_edges.emplace_back(vertices[0], vertices[1]);
+            all_edges.emplace_back(vertices[1], vertices[2]);
+            all_edges.emplace_back(vertices[2], vertices[0]);
+        });
 
-        Для каждой новой точки:
+        std::map<Edge, int> edge_count;
+        std::ranges::for_each(all_edges, [&edge_count](const auto &edge) { edge_count[edge]++; });
 
-            В цикле
-                Находятся все "плохие" треугольники (из текущей триангуляции), в чьи описанные окружности входит эта
-    точка (ContainsPoint); "плохими" называются треугольники, нарушающие условие Делоне (внутри окружности не должно
-    быть других точек);
+        // Find boundary edges (edges that appear only once)
+        auto boundary_edges = edge_count | std::views::filter([](const auto &pair) { return pair.second == 1; }) |
+                              std::views::transform([](const auto &pair) { return pair.first; }) |
+                              std::ranges::to<std::vector>();
 
-                Для всех рёбер этих треугольников формируется множество polygon, причём:
-                    - Если ребро ещё не встречалось - оно добавляется в polygon.
-                    - Если ребро встречается второй раз - оно удаляется из polygon.
+        auto it = std::ranges::remove_if(triangulation, [&bad_tr](const DelaunayTriangle &tri) {
+            return std::find(bad_tr.begin(), bad_tr.end(), tri) != bad_tr.end();
+        });
 
-            Получившееся множество polygon - это граница "дырки" (polygonal hole), которую нужно заполнить новыми
-    треугольниками
+        triangulation.erase(it.begin(), it.end());
 
-            Теперь требуется удалить из текущей триангуляции все плохие треугольники: cur_triangulation.erase(
-    bad_triangles.contains(*it) )
+        std::ranges::for_each(boundary_edges, [&triangulation, &point](const Edge &edge) {
+            triangulation.emplace_back(edge.p1, edge.p2, point);
+        });
+    };
 
-            Для каждой границы "дырки" (polygonal hole) создаются новые треугольники с новой точкой: { ТочкаРебра1,
-    ТочкаРебра2, НоваяТочка }.
+    std::ranges::for_each(points, watson_bowyer_algo);
 
-    Конец цикла
+    auto it = std::ranges::remove_if(triangulation, [&super1, &super2, &super3](const DelaunayTriangle &tri) {
+        auto vertices = tri.vertices();
+        return std::ranges::any_of(vertices, [&super1, &super2, &super3](const Point2D &vertex) {
+            return vertex == super1 || vertex == super2 || vertex == super3;
+        });
+    });
 
-    Удаляем все треугольники, включающие вершины супер-треугольника.
-    */
-    return std::unexpected(GeometryError::Unsupported);
+    triangulation.erase(it.begin(), it.end());
+
+    return triangulation;
 }
 }  // namespace geometry::triangulation
 
 template <>
 struct std::formatter<geometry::triangulation::DelaunayTriangle> {
-    constexpr auto parse(std::format_parse_context &ctx) { return ctx.begin(); }
+    constexpr auto parse(std::format_parse_context &ctx) const { return ctx.begin(); }
 
     template <typename FormatContext>
     auto format(const geometry::triangulation::DelaunayTriangle &t, FormatContext &ctx) const {

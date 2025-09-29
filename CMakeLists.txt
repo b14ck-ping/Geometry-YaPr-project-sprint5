@@ -28,6 +28,14 @@ CPMAddPackage(
     GIT_TAG master # or use a tag like v1.1.0
 )
 
+# После включения Matplot++
+if(TARGET matplot)
+    # Отключаем лечение предупреждений о deprecated-объявлениях для Matplot++
+    target_compile_options(matplot PRIVATE -Wno-deprecated-declarations)
+    # Или можно отключить преобразование всех предупреждений в ошибки для этой библиотеки
+    # target_compile_options(matplot PRIVATE -Wno-error)
+endif()
+
 file(GLOB HEADER_FILES "${CMAKE_SOURCE_DIR}/include/*.hpp")
 file(GLOB SRC_FILES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 list(REMOVE_ITEM SRC_FILES "${CMAKE_SOURCE_DIR}/src/main.cpp")
