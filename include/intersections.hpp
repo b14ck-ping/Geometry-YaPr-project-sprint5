@@ -1,4 +1,5 @@
 #pragma once
+#include "common.hpp"
 #include "geometry.hpp"
 #include <cmath>
 #include <optional>
@@ -7,7 +8,7 @@
 
 namespace geometry::intersections {
 
-static inline bool s_check_point_on_the_line(Point2D point, const Line &line) {
+static inline bool sCheckPointOnTheLine(Point2D point, const Line &line) {
     double max_x = line.start.x;
     double min_x = line.end.x;
     double max_y = line.start.y;
@@ -50,7 +51,7 @@ public:
 
         Point2D int_point = {intersection_x, intersection_y};
 
-        if (s_check_point_on_the_line(int_point, line1) && s_check_point_on_the_line(int_point, line2))
+        if (sCheckPointOnTheLine(int_point, line1) && sCheckPointOnTheLine(int_point, line2))
             return std::vector{int_point};
         else
             return std::nullopt;
@@ -72,7 +73,7 @@ public:
             return std::nullopt;
         }
 
-        if (d < 1e-10 && std::abs(circle1.radius - circle2.radius) < 1e-10) {
+        if (CheckDoubleIsZeroWithTolerance(d) && CheckDoubleIsZeroWithTolerance(circle1.radius - circle2.radius)) {
             return std::nullopt;
         }
 
@@ -83,7 +84,7 @@ public:
         p2.x = circle1.center_p.x + (a * dx) / d;
         p2.y = circle1.center_p.y + (a * dy) / d;
 
-        if (std::abs(h) < 1e-10) {
+        if (CheckDoubleIsZeroWithTolerance(h)) {
             intersections.push_back(p2);
             return intersections;
         }
@@ -106,7 +107,7 @@ public:
     std::optional<std::vector<Point2D>> operator()(const Line &line, const Circle &circle) const {
         std::vector<Point2D> result;
 
-        if (circle.radius < 1e-10) {
+        if (CheckDoubleIsZeroWithTolerance(circle.radius)) {
             Point2D circle_center = circle.center_p;
 
             Point2D v1 = {circle_center.x - line.start.x, circle_center.y - line.start.y};
@@ -116,19 +117,20 @@ public:
             double dot = v1.Dot(v2);
             double length_sq = v2.x * v2.x + v2.y * v2.y;
 
-            if (std::abs(cross) < 1e-10 && dot >= 0 && dot <= length_sq) {
+            if (CheckDoubleIsZeroWithTolerance(cross) && dot >= 0 && dot <= length_sq) {
                 result.push_back(circle_center);
                 return result;
             }
             return std::nullopt;
         }
 
-        if (std::abs(line.start.x - line.end.x) < 1e-10 && std::abs(line.start.y - line.end.y) < 1e-10) {
+        if (CheckDoubleIsZeroWithTolerance(line.start.x - line.end.x) &&
+            CheckDoubleIsZeroWithTolerance(line.start.y - line.end.y)) {
             double dx = line.start.x - circle.center_p.x;
             double dy = line.start.y - circle.center_p.y;
             double distance_sq = dx * dx + dy * dy;
 
-            if (std::abs(distance_sq - circle.radius * circle.radius) < 1e-10) {
+            if (CheckDoubleIsZeroWithTolerance(distance_sq - circle.radius * circle.radius)) {
                 result.push_back(line.start);
                 return result;
             }

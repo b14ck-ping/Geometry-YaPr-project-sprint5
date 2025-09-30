@@ -1,6 +1,8 @@
 #pragma once
+#include "common.hpp"
 #include "geometry.hpp"
 #include <algorithm>
+#include <expected>
 #include <optional>
 #include <stdexcept>
 #include <variant>
@@ -11,6 +13,15 @@ template <class... Ts>
 struct Multilambda : Ts... {
     using Ts::operator()...;
 };
+
+template <typename T>
+concept HasVertices = requires(T t) { t.Vertices(); };
+
+template <typename T>
+concept HasHeight = requires(T t) { t.Height(); };
+
+template <typename T>
+concept HasBoundBox = requires(T t) { t.BoundBox(); };
 
 /*
  * Класс для поиска расстояния от точки до фигуры
@@ -24,7 +35,7 @@ struct PointToShapeDistanceVisitor {
 
     /* ваш код здесь */
     std::optional<double> operator()(const Line &line) const {
-        if (line.start.DistanceTo(line.end) < 1e-10) {
+        if (line.start.DistanceTo(line.end) < tolerance__) {
             return point.DistanceTo(line.start);
         }
 
@@ -58,11 +69,11 @@ struct PointToShapeDistanceVisitor {
             return 0.0;
         }
 
-        double distAB = PointToShapeDistanceVisitor{point}(Line{tr.a, tr.b}).value_or(0.0);
-        double distBC = PointToShapeDistanceVisitor{point}(Line{tr.b, tr.c}).value_or(0.0);
-        double distCA = PointToShapeDistanceVisitor{point}(Line{tr.c, tr.a}).value_or(0.0);
+        std::array<double, 3> distances = {PointToShapeDistanceVisitor{point}(Line{tr.a, tr.b}).value_or(0.0),
+                                           PointToShapeDistanceVisitor{point}(Line{tr.b, tr.c}).value_or(0.0),
+                                           PointToShapeDistanceVisitor{point}(Line{tr.c, tr.a}).value_or(0.0)};
 
-        return std::min({distAB, distBC, distCA});
+        return *std::min_element(distances.begin(), distances.end());
     }
 
     std::optional<double> operator()(const Rectangle &rect) const {
@@ -73,16 +84,17 @@ struct PointToShapeDistanceVisitor {
 
         auto vertices = rect.Vertices();
 
-        double dist1 = PointToShapeDistanceVisitor{point}(Line{vertices[0], vertices[1]}).value_or(0.0);
-        double dist2 = PointToShapeDistanceVisitor{point}(Line{vertices[1], vertices[2]}).value_or(0.0);
-        double dist3 = PointToShapeDistanceVisitor{point}(Line{vertices[2], vertices[3]}).value_or(0.0);
-        double dist4 = PointToShapeDistanceVisitor{point}(Line{vertices[3], vertices[0]}).value_or(0.0);
+        std::array<double, 4> distances = {
+            PointToShapeDistanceVisitor{point}(Line{vertices[0], vertices[1]}).value_or(0.0),
+            PointToShapeDistanceVisitor{point}(Line{vertices[1], vertices[2]}).value_or(0.0),
+            PointToShapeDistanceVisitor{point}(Line{vertices[2], vertices[3]}).value_or(0.0),
+            PointToShapeDistanceVisitor{point}(Line{vertices[3], vertices[0]}).value_or(0.0)};
 
-        return std::min({dist1, dist2, dist3, dist4});
+        return *std::min_element(distances.begin(), distances.end());
     }
 
     std::optional<double> operator()(const RegularPolygon &poly) const {
-        if (poly.radius < 1e-10) {
+        if (CheckDoubleIsZeroWithTolerance(poly.radius)) {
             return point.DistanceTo(poly.center_p);
         }
 
@@ -95,51 +107,11 @@ struct PointToShapeDistanceVisitor {
 
         double dist_to_center = point.DistanceTo(poly.center_p);
 
-        if (dist_to_center <= poly.radius) {
-            bool inside = false;
-            for (int i = 0, j = n - 1; i < n; j = i++) {
-                if (((vertices[i].y > point.y) != (vertices[j].y > point.y)) &&
-                    (point.x <
-                     (vertices[j].x - vertices[i].x) * (point.y - vertices[i].y) / (vertices[j].y - vertices[i].y) +
-                         vertices[i].x)) {
-                    inside = !inside;
-                }
-            }
+        if (((dist_to_center <= poly.radius) && CheckPointIsInside(vertices)) ||
+            CheckZeroDistance(vertices).has_value())
+            return 0.0;
 
-            if (inside) {
-                return 0.0;
-            }
-        }
-
-        for (int i = 0; i < n; ++i) {
-            Point2D a = vertices[i];
-            Point2D b = vertices[(i + 1) % n];
-
-            Point2D ab = b - a;
-            Point2D ap = point - a;
-
-            double ab_length_sq = ab.Dot(ab);
-            double dot = ap.Dot(ab);
-            double t = dot / ab_length_sq;
-
-            if (t >= 0.0 && t <= 1.0) {
-                Point2D projection = a + ab * t;
-                if (point.DistanceTo(projection) < 1e-10) {
-                    return 0.0;
-                }
-            }
-        }
-
-        double min_distance = std::numeric_limits<double>::max();
-        for (int i = 0; i < n; ++i) {
-            double dist =
-                PointToShapeDistanceVisitor{point}(Line{vertices[i], vertices[(i + 1) % n]}).value_or(min_distance);
-            if (dist < min_distance) {
-                min_distance = dist;
-            }
-        }
-
-        return min_distance;
+        return FindMinDistance(vertices);
     }
 
     std::optional<double> operator()(const Circle &circle) const {
@@ -161,6 +133,17 @@ struct PointToShapeDistanceVisitor {
         if (n == 2)
             return PointToShapeDistanceVisitor{point}(Line{vertices[0], vertices[1]});
 
+        if (CheckZeroDistance(vertices).has_value() || CheckPointIsInside(vertices))
+            return 0.0;
+
+        return FindMinDistance(vertices);
+    }
+
+    std::optional<double> operator()(const auto &) const { return std::nullopt; }
+
+private:
+    std::optional<double> CheckZeroDistance(const std::vector<Point2D> &vertices) const {
+        int n = vertices.size();
         for (int i = 0; i < n; ++i) {
             Point2D a = vertices[i];
             Point2D b = vertices[(i + 1) % n];
@@ -174,26 +157,17 @@ struct PointToShapeDistanceVisitor {
 
             if (t >= 0.0 && t <= 1.0) {
                 Point2D projection = a + ab * t;
-                if (point.DistanceTo(projection) < 1e-10) {
+                if (CheckDoubleIsZeroWithTolerance(point.DistanceTo(projection))) {
                     return 0.0;
                 }
             }
         }
+        return std::optional<double>{};
+    }
 
-        bool inside = false;
-        for (int i = 0, j = n - 1; i < n; j = i++) {
-            if (((vertices[i].y > point.y) != (vertices[j].y > point.y)) &&
-                (point.x <
-                 (vertices[j].x - vertices[i].x) * (point.y - vertices[i].y) / (vertices[j].y - vertices[i].y) +
-                     vertices[i].x)) {
-                inside = !inside;
-            }
-        }
-
-        if (inside)
-            return 0.0;
-
+    double FindMinDistance(const std::vector<Point2D> &vertices) const {
         double min_distance = std::numeric_limits<double>::max();
+        int n = vertices.size();
         for (int i = 0; i < n; ++i) {
             double dist =
                 PointToShapeDistanceVisitor{point}(Line{vertices[i], vertices[(i + 1) % n]}).value_or(min_distance);
@@ -204,7 +178,19 @@ struct PointToShapeDistanceVisitor {
         return min_distance;
     }
 
-    std::optional<double> operator()(const auto &) const { return std::nullopt; }
+    bool CheckPointIsInside(const std::vector<Point2D> &vertices) const {
+        bool inside = false;
+        int n = vertices.size();
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            if (((vertices[i].y > point.y) != (vertices[j].y > point.y)) &&
+                (point.x <
+                 (vertices[j].x - vertices[i].x) * (point.y - vertices[i].y) / (vertices[j].y - vertices[i].y) +
+                     vertices[i].x)) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
 };
 
 /*
@@ -231,12 +217,10 @@ struct ShapeToShapeDistanceVisitor {
             return 0.0;
         }
 
-        double d1 = line1.start.DistanceTo(line2.start);
-        double d2 = line1.start.DistanceTo(line2.end);
-        double d3 = line1.end.DistanceTo(line2.start);
-        double d4 = line1.end.DistanceTo(line2.end);
+        std::array<double, 4> distances = {line1.start.DistanceTo(line2.start), line1.start.DistanceTo(line2.end),
+                                           line1.end.DistanceTo(line2.start), line1.end.DistanceTo(line2.end)};
 
-        return std::min({d1, d2, d3, d4});
+        return *std::min_element(distances.begin(), distances.end());
     }
 
     std::optional<double> operator()(const auto &shape1, const auto &shape2) const { return std::nullopt; }
@@ -246,7 +230,7 @@ private:
         Point2D dir1 = line1.end - line1.start;
         Point2D dir2 = line2.end - line2.start;
 
-        if (std::abs(dir1.Cross(dir2)) > 1e-10) {
+        if (CheckDoubleIsZeroWithTolerance(dir1.Cross(dir2))) {
             return false;
         }
 
@@ -268,11 +252,7 @@ inline std::optional<double> DistanceToPoint(const Shape &shape, const Point2D &
 inline BoundingBox GetBoundBox(const Shape &shape) {
 
     return std::visit(
-        Multilambda{[](const Line &line) { return line.BoundBox(); }, [](const Triangle &tr) { return tr.BoundBox(); },
-                    [](const Rectangle &rect) { return rect.BoundBox(); },
-                    [](const RegularPolygon &regpol) { return regpol.BoundBox(); },
-                    [](const Polygon &polygon) { return polygon.BoundBox(); },
-                    [](const Circle &circle) { return circle.BoundBox(); },
+        Multilambda{[]<HasBoundBox T>(const T &shape) -> BoundingBox { return shape.BoundBox(); },
                     [](const auto &) -> BoundingBox { throw std::logic_error("Unsupported type in GetBoundBox"); }},
         shape);
 }
@@ -280,12 +260,8 @@ inline BoundingBox GetBoundBox(const Shape &shape) {
 inline double GetHeight(const Shape &shape) {
 
     return std::visit(
-        Multilambda{[](const Line &line) { return line.Height(); }, [](const Triangle &tr) { return tr.Height(); },
-                    [](const Rectangle &rect) { return rect.Height(); },
-                    [](const RegularPolygon &regpol) { return regpol.Height(); },
-                    [](const Polygon &polygon) { return polygon.Height(); },
-                    [](const Circle &circle) { return circle.Height(); },
-                    [](const auto &) -> BoundingBox { throw std::logic_error("Unsupported type in GetBoundBox"); }},
+        Multilambda{[]<HasVertices T>(const T &shape) -> double { return shape.Height(); },
+                    [](const auto &) -> double { throw std::logic_error("Unsupported type in GetHeight"); }},
         shape);
 }
 
@@ -302,32 +278,12 @@ inline std::optional<double> DistanceBetweenShapes(const Shape &shape1, const Sh
 
 inline std::optional<std::vector<Point2D>> GetVertexes(const Shape &shape) {
 
-    return std::visit(Multilambda{[](const Line &line) -> std::vector<Point2D> {
-                                      auto vert = line.Vertices();
-                                      return std::vector(std::begin(vert), std::end(vert));
-                                  },
-                                  [](const Triangle &tr) -> std::vector<Point2D> {
-                                      auto vert = tr.Vertices();
-                                      return std::vector(std::begin(vert), std::end(vert));
-                                  },
-                                  [](const Rectangle &rect) -> std::vector<Point2D> {
-                                      auto vert = rect.Vertices();
-                                      return std::vector(std::begin(vert), std::end(vert));
-                                  },
-                                  [](const RegularPolygon &regpol) -> std::vector<Point2D> {
-                                      auto vert = regpol.Vertices();
-                                      return std::vector(std::begin(vert), std::end(vert));
-                                  },
-                                  [](const Polygon &polygon) -> std::vector<Point2D> {
-                                      auto vert = polygon.Vertices();
-                                      return std::vector(std::begin(vert), std::end(vert));
-                                  },
-                                  [](const Circle &circle) -> std::vector<Point2D> {
-                                      auto vert = circle.Vertices();
+    return std::visit(Multilambda{[]<HasVertices T>(const T &shape) -> std::vector<Point2D> {
+                                      auto vert = shape.Vertices();
                                       return std::vector(std::begin(vert), std::end(vert));
                                   },
                                   [](const auto &) -> std::vector<Point2D> {
-                                      throw std::logic_error("Unsupported type in GetBoundBox");
+                                      throw std::logic_error("Unsupported type in GetVertexes");
                                   }},
                       shape);
 }

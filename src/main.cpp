@@ -17,23 +17,23 @@ using namespace geometry;
 namespace rng = std::ranges;
 namespace views = std::ranges::views;
 
-static inline std::string shape_to_string(const Shape &shape) {
+static inline std::string ShapeToString(const Shape &shape) {
     return std::visit([](const auto &cs) { return std::format("{}", cs); }, shape);
 }
 
-static inline bool is_support_intersection(const Shape &shape) {
+static inline bool IsSupportIntersection(const Shape &shape) {
     return std::holds_alternative<Line>(shape) || std::holds_alternative<Circle>(shape);
 };
 
-void PrintAllIntersections(const Shape &shape, std::vector<Shape> others) {
+void PrintAllIntersections(const Shape &shape, const std::vector<Shape> &others) {
     std::println("\n=== Intersections ===");
 
-    if (!is_support_intersection(shape)) {
-        std::println("Shape {} not support intersactions.", shape_to_string(shape));
+    if (!IsSupportIntersection(shape)) {
+        std::println("Shape {} not support intersactions.", ShapeToString(shape));
         return;
     }
 
-    auto supported_shapes = views::filter(others, is_support_intersection) | rng::to<std::vector>();
+    auto supported_shapes = views::filter(others, IsSupportIntersection) | rng::to<std::vector>();
     auto shapes_pairs = views::cartesian_product(std::vector<Shape>{shape}, supported_shapes);
     rng::for_each(shapes_pairs, [](const std::tuple<Shape, Shape> &shapes) {
         Shape shape1 = std::get<0>(shapes);
@@ -41,14 +41,14 @@ void PrintAllIntersections(const Shape &shape, std::vector<Shape> others) {
         auto res = geometry::intersections::GetIntersectPoint(shape1, shape2);
 
         if (res)
-            std::println("Intersection found in points [{}] between shapes {} and {}", *res, shape_to_string(shape1),
-                         shape_to_string(shape2));
+            std::println("Intersection found in points [{}] between shapes {} and {}", *res, ShapeToString(shape1),
+                         ShapeToString(shape2));
         else
-            std::println("Shapes {} and {} doesn't intersect", shape_to_string(shape1), shape_to_string(shape2));
+            std::println("Shapes {} and {} doesn't intersect", ShapeToString(shape1), ShapeToString(shape2));
     });
 }
 
-void PrintDistancesFromPointToShapes(Point2D p, std::vector<Shape> shapes) {
+void PrintDistancesFromPointToShapes(const Point2D &p, const std::vector<Shape> &shapes) {
     std::println("\n=== Distance from Point Test ===");
     std::println("Testing point: {} ", p);
 
@@ -59,23 +59,23 @@ void PrintDistancesFromPointToShapes(Point2D p, std::vector<Shape> shapes) {
         auto res = geometry::queries::DistanceToPoint(shape, p);
 
         if (res)
-            std::println("Distance from point {} to shape {} is {}", p, shape_to_string(shape), *res);
+            std::println("Distance from point {} to shape {} is {}", p, ShapeToString(shape), *res);
         else
-            std::println("Distance from point {} to shape {} can't be found.", p, shape_to_string(shape));
+            std::println("Distance from point {} to shape {} can't be found.", p, ShapeToString(shape));
     });
 }
 
-void PerformShapeAnalysis(std::vector<Shape> shapes) {
+void PerformShapeAnalysis(const std::vector<Shape> &shapes) {
     std::println("\n=== Shape Analysis ===");
 
     auto max_hight = geometry::utils::FindHighestShape(shapes);
     if (max_hight.has_value())
-        std::println("Shape with max height : {}, height = {}", shape_to_string(max_hight.value()),
+        std::println("Shape with max height : {}, height = {}", ShapeToString(max_hight.value()),
                      geometry::queries::GetHeight(max_hight.value()));
     else
         std::println("Can't find highest shape");
 
-    auto supported_shapes = views::filter(shapes, is_support_intersection) | rng::to<std::vector>();
+    auto supported_shapes = views::filter(shapes, IsSupportIntersection) | rng::to<std::vector>();
 
     for (size_t i = 0; i < supported_shapes.size() - 1; i++) {
         Shape shape1 = supported_shapes[i];
@@ -84,10 +84,10 @@ void PerformShapeAnalysis(std::vector<Shape> shapes) {
             auto res = geometry::intersections::GetIntersectPoint(shape1, shape2);
 
             if (res)
-                std::println("Intersection found in points [{}] between shapes {} and {}", *res,
-                             shape_to_string(shape1), shape_to_string(shape2));
+                std::println("Intersection found in points [{}] between shapes {} and {}", *res, ShapeToString(shape1),
+                             ShapeToString(shape2));
             else
-                std::println("Shapes {} and {} doesn't intersect", shape_to_string(shape1), shape_to_string(shape2));
+                std::println("Shapes {} and {} doesn't intersect", ShapeToString(shape1), ShapeToString(shape2));
         }
     }
 
@@ -101,10 +101,9 @@ void PerformShapeAnalysis(std::vector<Shape> shapes) {
         Shape shape2 = out[1];
         auto res = geometry::queries::DistanceBetweenShapes(shape1, shape2);
         if (res)
-            std::println("Distance between shapes {} and {} is {}", shape_to_string(shape1), shape_to_string(shape2),
-                         *res);
+            std::println("Distance between shapes {} and {} is {}", ShapeToString(shape1), ShapeToString(shape2), *res);
         else
-            std::println("Can't measure distance between {} and {}", shape_to_string(shape1), shape_to_string(shape2));
+            std::println("Can't measure distance between {} and {}", ShapeToString(shape1), ShapeToString(shape2));
     }
 }
 
@@ -128,13 +127,13 @@ void PerformExtraShapeAnalysis(std::span<const Shape> shapes) {
 
     std::println("{} shapes with hight above 50", out.size());
     for (auto shape : out) {
-        std::println("{}, height = {}", shape_to_string(shape), geometry::queries::GetHeight(shape));
+        std::println("{}, height = {}", ShapeToString(shape), geometry::queries::GetHeight(shape));
     }
 
-    std::println("Shape with max height : {}, height = {}", shape_to_string(max_hight),
+    std::println("Shape with max height : {}, height = {}", ShapeToString(max_hight),
                  geometry::queries::GetHeight(max_hight));
 
-    std::println("Shape with min height : {}, height = {}", shape_to_string(min_hight),
+    std::println("Shape with min height : {}, height = {}", ShapeToString(min_hight),
                  geometry::queries::GetHeight(min_hight));
 }
 

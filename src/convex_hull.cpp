@@ -33,7 +33,7 @@ static inline std::vector<geometry::Point2D> SortByPolarAngle(std::vector<geomet
         return points;
 
     auto it_remove = std::remove_if(points.begin(), points.end(), [&P0](const Point2D &p) {
-        return std::abs(p.x - P0.x) < 1e-9 && std::abs(p.y - P0.y) < 1e-9;
+        return CheckDoubleIsZeroWithTolerance(p.x - P0.x) && CheckDoubleIsZeroWithTolerance(p.y - P0.y);
     });
     points.erase(it_remove, points.end());
 
@@ -47,7 +47,7 @@ static inline std::vector<geometry::Point2D> SortByPolarAngle(std::vector<geomet
         geometry::Point2D vecB = b - P0;
 
         double cr = CrossProduct(P0, a, b);
-        if (std::abs(cr) > 1e-12)
+        if (!CheckDoubleIsZeroWithTolerance(cr))
             return cr > 0;
 
         return vecA.Length() > vecB.Length();
@@ -60,7 +60,7 @@ static inline std::vector<geometry::Point2D> SortByPolarAngle(std::vector<geomet
         geometry::Point2D vecB = b - P0;
         double angleA = std::atan2(vecA.y, vecA.x);
         double angleB = std::atan2(vecB.y, vecB.x);
-        return std::abs(angleA - angleB) < 1e-9;
+        return CheckDoubleIsZeroWithTolerance(angleA - angleB);
     });
     points.erase(unique_it, points.end());
 

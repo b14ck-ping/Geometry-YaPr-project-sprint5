@@ -281,17 +281,17 @@ class Polygon {
 public:
     constexpr Polygon(std::initializer_list<Point2D> list) {
         points_ = list;
-        get_bounding_box();
+        GetBoundingBox();
     }
 
     constexpr Polygon(const std::vector<Point2D> &vec) {
         points_ = vec;
-        get_bounding_box();
+        GetBoundingBox();
     }
 
     Polygon(std::vector<Point2D> &&vec) {
         points_ = std::move(vec);
-        get_bounding_box();
+        GetBoundingBox();
     }
 
     BoundingBox BoundBox() const { return bounding_box_; }
@@ -305,7 +305,7 @@ public:
         return center / static_cast<double>(std::ranges::distance(points_));
     }
 
-    std::vector<Point2D> Vertices() const { return points_; }
+    const std::vector<Point2D> &Vertices() const { return points_; }
 
     Lines2DDyn Lines() const {
         Lines2DDyn lines{};
@@ -318,7 +318,7 @@ public:
     }
 
 private:
-    constexpr void get_bounding_box() {
+    constexpr void GetBoundingBox() {
         Point2D p_min{points_[0]}, p_max{points_[0]};
 
         std::ranges::for_each(points_, [&p_min, &p_max](const Point2D &a) {
