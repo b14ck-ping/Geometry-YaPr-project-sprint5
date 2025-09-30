@@ -15,7 +15,8 @@
       ]
     }
   },
+  "remoteUser": "ubuntu",
   "mounts": [
-    "source=${env:HOME}/.gitconfig,target=/etc/gitconfig,type=bind,consistency=cached"
+    "source=${env:HOME}/.ssh,target=/home/ubuntu/.ssh,type=bind,consistency=cached"
   ]
 }

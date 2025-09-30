@@ -63,7 +63,7 @@ private:
     std::uniform_int_distribution<int> type_dist;
 };
 
-std::vector<std::pair<Shape, Shape>> FindAllCollisions(ReplaceMe shapes) {
+inline std::vector<std::pair<Shape, Shape>> FindAllCollisions(const std::vector<Shape> shapes) {
     std::vector<std::pair<Shape, Shape>> collisions;
 
     /*
@@ -72,18 +72,44 @@ std::vector<std::pair<Shape, Shape>> FindAllCollisions(ReplaceMe shapes) {
      * Также используйте наиболее эффективный метод добавления объектов в collisions
      */
 
-    return collisions;
+    size_t n = shapes.size();
+    auto make_index_pair = [&n](size_t i) {
+        return std::views::iota(i + 1, n)  // Indexes j от i+1 до n-1
+               | std::views::transform([i](size_t j) { return std::make_pair(i, j); });
+    };
+
+    auto check_shapes_pair =
+        [&shapes](const std::pair<size_t, size_t> &index_pair) -> std::optional<std::pair<Shape, Shape>> {
+        Shape shape1 = shapes.at(index_pair.first);
+        Shape shape2 = shapes.at(index_pair.second);
+
+        if (geometry::queries::BoundingBoxesOverlap(shape1, shape2))
+            return std::pair<Shape, Shape>{shape1, shape2};
+        else
+            return std::nullopt;
+    };
+
+    return std::views::iota(0uz, n) | std::views::transform(make_index_pair) | std::views::join |
+           std::views::transform(check_shapes_pair) |
+           std::views::filter([](const auto &opt) { return opt.has_value(); }) |
+           std::views::transform([](const auto &opt) { return *opt; }) | std::ranges::to<std::vector>();
 }
 
-std::optional<size_t> FindHighestShape(ReplaceMe shapes) {
+inline std::optional<Shape> FindHighestShape(const std::vector<Shape> shapes) {
 
     /*
      * Используйте библиотеку ranges, чтобы найти самую высокую фигуру
      *
      * Важно: использование ручной итерации по фигурам не разрешается
      */
+    if (shapes.empty())
+        return std::nullopt;
 
-    return std::nullopt;
+    Shape highest_shape = std::ranges::max(shapes, [](const auto &shape1, const auto &shape2) {
+        return geometry::queries::GetHeight(shape1) < geometry::queries::GetHeight(shape2);
+    });
+
+    return highest_shape;
 }
 
 }  // namespace geometry::utils

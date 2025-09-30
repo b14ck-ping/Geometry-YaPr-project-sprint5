@@ -7,7 +7,7 @@
 
 namespace geometry::convex_hull {
 
-double CrossProduct(Point2D p1, Point2D middle, Point2D p2);
+double CrossProduct(const Point2D &p1, const Point2D &middle, const Point2D &p2);
 
 class StackForGrahamScan {
 public:
@@ -24,6 +24,6 @@ private:
     std::vector<Point2D> s;
 };
 
-GeometryResult<std::vector<Point2D>> GrahamScan(ReplaceMe points);
+GeometryResult<std::vector<Point2D>> GrahamScan(std::vector<Shape> points);
 
 }  // namespace geometry::convex_hull
